@@ -65,3 +65,46 @@ EOF
 ## Bugs
 
 There is not a lot of error checking so e.g. overwriting existing files is easily possible.
+
+## Example Apache configurations
+
+### Backend / application
+
+SSLEngine on
+
+SSLProtocol TLSv1.2
+SSLCipherSuite ECDHE-RSA-AES256-GCM-SHA384
+SSLHonorCipherOrder on
+SSLCompression off
+
+SSLCertificateFile /srv/tls/foo-app-cert.pem
+SSLCertificateKeyFile /srv/tls/foo-app-key.pem
+
+SSLCACertificateFile /srv/tls/foo-ca-cert.pem
+SSLVerifyClient require
+SSLVerifyDepth 1
+
+# The proxy will always have serial 0x1000, this prevents 
+# other backends from connecting using their own certs.
+<If "%{SSL_CLIENT_M_SERIAL} != 1000">
+	Require all denied
+</If>
+
+### Frontend / reverse proxy
+
+# to (hypothetically) avoid HTTP desync attacks
+SetEnv proxy-nokeepalive 1
+
+SSLProxyEngine on
+SSLProxyVerify on
+SSLProxyCheckPeerName off
+
+ProxyPass / https://foo-app.example.com/
+ProxyPassReverse / https://foo-app.example.com/
+UseCanonicalName on
+ProxyPreserveHost on
+
+SSLProxyCACertificateFile /srv/tls/foo/foo-ca-cert.pem
+SSLProxyMachineCertificateFile /srv/tls/foo/foo-proxy-combined.pem
+SSLCertificateFile /etc/letsencrypt/live/foo.example.com/fullchain.pem
+SSLCertificateKeyFile /etc/letsencrypt/live/foo.example.com/privkey.pem
