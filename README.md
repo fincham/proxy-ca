@@ -68,8 +68,13 @@ There is not a lot of error checking so e.g. overwriting existing files is easil
 
 ## Example Apache configurations
 
+These configuration fragments show how you could add TLS mutual auth to a reverse proxy that connects back to a specific internal application.
+
+This proxy would then be a good place to e.g. add additional authentication checks, logging etc.
+
 ### Backend / application
 
+```
 SSLEngine on
 
 SSLProtocol TLSv1.2
@@ -89,9 +94,11 @@ SSLVerifyDepth 1
 <If "%{SSL_CLIENT_M_SERIAL} != 1000">
 	Require all denied
 </If>
+```
 
 ### Frontend / reverse proxy
 
+```
 # to (hypothetically) avoid HTTP desync attacks
 SetEnv proxy-nokeepalive 1
 
@@ -108,3 +115,4 @@ SSLProxyCACertificateFile /srv/tls/foo/foo-ca-cert.pem
 SSLProxyMachineCertificateFile /srv/tls/foo/foo-proxy-combined.pem
 SSLCertificateFile /etc/letsencrypt/live/foo.example.com/fullchain.pem
 SSLCertificateKeyFile /etc/letsencrypt/live/foo.example.com/privkey.pem
+```
