@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "touch $1-proxy-key.pem"
+echo "chmod 0600 $1-proxy-key.pem"
+echo "cat > $1-proxy-cert.pem <<EOF"
+cat $1-proxy-cert.pem
+echo "EOF"
+echo "cat > $1-proxy-key.pem <<EOF"
+cat $1-proxy-key.pem
+echo "EOF"
+echo "cat > $1-ca-cert.pem <<EOF"
+cat $1-ca-cert.pem
+echo "EOF"

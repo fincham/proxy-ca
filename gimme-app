@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "touch $1-app-key.pem"
+echo "chmod 0600 $1-app-key.pem"
+echo "cat > $1-app-cert.pem <<EOF"
+cat $1-app-cert.pem
+echo "EOF"
+echo "cat > $1-app-key.pem <<EOF"
+cat $1-app-key.pem
+echo "EOF"
+echo "cat > $1-ca-cert.pem <<EOF"
+cat $1-ca-cert.pem
+echo "EOF"

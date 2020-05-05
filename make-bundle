@@ -1,0 +1,97 @@
+#!/bin/bash
+
+function generate_csr_and_key {
+    openssl genrsa -out "$1-key.pem" 4096
+    openssl req -config "$ca_dir/ca.cnf" -batch -new -key "$1-key.pem" -out "$1-csr.pem" -subj "/CN=$1"
+}
+
+umask 0077
+
+bundle="$1"
+if [[ "x$bundle" = "x" ]]; then
+    echo "usage: $0 bundle-name"
+    echo ""
+    echo "where 'bundle-name' is the name of the backend service the bundle is generated for."
+    exit 1
+fi
+
+ca_dir="$(mktemp -d)"
+mkdir -p "$ca_dir"
+
+cat << EOF > "$ca_dir/ca.cnf"
+[ ca ]
+default_ca = CA_default 
+
+[ CA_default ]
+dir = $ca_dir/ca
+database = \$dir/index.txt 
+new_certs_dir = \$dir/newcerts 
+
+certificate = "$bundle-ca-cert.pem"
+serial = \$dir/serial 
+private_key = \$dir/private/cakey.pem
+RANDFILE = \$dir/private/.rand 
+
+default_days = 3650
+default_crl_days= 30 
+default_md = sha256 
+
+policy = just_common_name
+email_in_dn = no 
+
+name_opt = ca_default 
+cert_opt = ca_default 
+copy_extensions = none 
+x509_extensions = dont_issue_a_ca
+
+[ just_common_name ]
+commonName = supplied
+
+[ dont_issue_a_ca ]
+basicConstraints=CA:FALSE
+
+[ v3_ca ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints = CA:true
+
+[ req ]
+default_bits        = 2048
+default_keyfile     = privkey.pem
+x509_extensions = v3_ca
+distinguished_name  = req_distinguished_name
+
+[ req_distinguished_name ]
+commonName = Common name
+EOF
+
+echo "*** Generating new bundle for '$bundle'..."
+echo "*** Setting up the CA..."
+
+mkdir -p "$ca_dir/ca/private"
+mkdir -p "$ca_dir/ca/newcerts"
+touch "$ca_dir/ca/index.txt"
+touch "$ca_dir/ca/index.txt.attr"
+echo 1000 > "$ca_dir/ca/serial"
+
+ca_pass=$(dd if=/dev/urandom bs=1 count=32 2>/dev/null | xxd -ps)
+openssl genrsa -out "$ca_dir/ca/private/cakey.pem" -aes256 -passout stdin 4096 <<< "$ca_pass"
+openssl req -new -x509 -extensions v3_ca -key "$ca_dir/ca/private/cakey.pem" -out "./$bundle-ca-cert.pem" -config "$ca_dir/ca.cnf" -batch -subj "/CN=$bundle CA" -days 3650 -passin stdin <<< "$ca_pass"
+
+echo "*** The CA cert is in '$bundle-ca-cert.pem'"
+
+echo "*** Generating keys..."
+generate_csr_and_key  "$bundle-proxy"
+generate_csr_and_key  "$bundle-app"
+
+echo "*** Signing CSRs..."
+openssl x509 -CA "$bundle-ca-cert.pem" -CAkey "$ca_dir/ca/private/cakey.pem" -req -passin stdin -set_serial 4096 -in "$bundle-proxy-csr.pem" -out "$bundle-proxy-cert.pem" -days 3650 <<< "$ca_pass"
+openssl x509 -CA "$bundle-ca-cert.pem" -CAkey "$ca_dir/ca/private/cakey.pem" -req -passin stdin -set_serial 4097 -in "$bundle-app-csr.pem" -out "$bundle-app-cert.pem" -days 3650 <<< "$ca_pass"
+cat "$bundle-proxy-cert.pem" "$bundle-proxy-key.pem" > "$bundle-proxy-combined.pem"
+
+echo "*** Cleaning up CA..."
+shred -u -z -n 5 "$ca_dir/ca/private/cakey.pem"
+rm -rf "$ca_dir"
+
+echo "*** The cert and key are in '$bundle-{proxy,app}-{cert,key}.pem'"
+echo "*** The proxy "combined" cert/key bundle is in '$bundle-proxy-combined.pem'"
